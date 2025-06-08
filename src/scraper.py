@@ -3,6 +3,7 @@ import pandas as pd
 import time
 from datetime import datetime
 import json
+import os
 
 def scrape_app_reviews(app_id, country="us", lang="en", count=500):
     """
@@ -50,8 +51,12 @@ def main():
         "com.dashen.dashensuperapp": "Dashen Bank"
     }
     
-    all_reviews = []
+    # Create data directory if it doesn't exist
+    os.makedirs("data/raw", exist_ok=True)
     
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Process each bank separately
     for app_id, bank_name in app_ids.items():
         df = scrape_app_reviews(app_id)
         if not df.empty:
@@ -65,22 +70,16 @@ def main():
             # Select only necessary columns
             df = df[['review_text', 'rating', 'date', 'bank', 'source']]
             
-            all_reviews.append(df)
+            # Generate a bank-specific filename
+            # Replace spaces with underscores and make it lowercase for a cleaner filename
+            bank_filename = bank_name.replace(' ', '_').lower()
+            file_path = f"data/raw/{bank_filename}_reviews_{timestamp}.csv"
+            
+            # Save to CSV
+            df.to_csv(file_path, index=False)
+            print(f"Reviews for {bank_name} saved to {file_path}")
     
-    # Combine all reviews
-    if all_reviews:
-        combined_df = pd.concat(all_reviews, ignore_index=True)
-        
-        # Save raw data
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        raw_data_path = f"data/raw/bank_reviews_raw_{timestamp}.csv"
-        combined_df.to_csv(raw_data_path, index=False)
-        print(f"Raw data saved to {raw_data_path}")
-        
-        return combined_df
-    else:
-        print("No reviews were collected.")
-        return pd.DataFrame()
+    print("All bank reviews have been saved to separate CSV files.")
 
 if __name__ == "__main__":
     main()
