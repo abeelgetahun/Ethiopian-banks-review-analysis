@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 import os
 import json
+from pathlib import Path
 
 def preprocess_reviews(df):
     """
@@ -54,40 +55,42 @@ def preprocess_reviews(df):
     return processed_df, quality_report
 
 def save_processed_data(df, report):
-    os.makedirs('../data/processed', exist_ok=True)
+    base_dir = Path(__file__).resolve().parents[1]
+    processed_dir = base_dir / 'data' / 'processed'
+    processed_dir.mkdir(parents=True, exist_ok=True)
 
-    processed_data_path = "../data/processed/bank_reviews_processed.csv"
+    processed_data_path = processed_dir / 'bank_reviews_processed.csv'
     df.to_csv(processed_data_path, index=False)
 
-    report_path = "../data/processed/quality_report.json"
+    report_path = processed_dir / 'quality_report.json'
     with open(report_path, 'w') as f:
         json.dump(report, f, indent=4)
 
     print(f"Processed data saved to {processed_data_path}")
     print(f"Quality report saved to {report_path}")
 
-    return processed_data_path, report_path
+    return str(processed_data_path), str(report_path)
 
 def main():
-    raw_data_dir = "../data/raw"
-    if not os.path.exists(raw_data_dir):
+    base_dir = Path(__file__).resolve().parents[1]
+    raw_data_dir = base_dir / 'data' / 'raw'
+    if not raw_data_dir.exists():
         print(f"Raw data directory {raw_data_dir} does not exist.")
         return
 
-    raw_files = [f for f in os.listdir(raw_data_dir) if f.endswith('.csv')]
+    raw_files = [f for f in raw_data_dir.iterdir() if f.suffix == '.csv']
     if not raw_files:
         print(f"No CSV files found in {raw_data_dir}")
         return
 
     all_dfs = []
-    for file in raw_files:
-        file_path = os.path.join(raw_data_dir, file)
+    for file_path in raw_files:
         try:
             df = pd.read_csv(file_path)
             all_dfs.append(df)
-            print(f"Loaded {file}")
+            print(f"Loaded {file_path.name}")
         except Exception as e:
-            print(f"Skipping {file} due to error: {e}")
+            print(f"Skipping {file_path.name} due to error: {e}")
 
     if not all_dfs:
         print("No valid data loaded.")
