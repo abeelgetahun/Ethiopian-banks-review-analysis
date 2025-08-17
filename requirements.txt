@@ -6,4 +6,12 @@ seaborn
 nltk
 scikit-learn
 
+# NLP utilities used in the project
+textblob
+langdetect
+wordcloud
+spacy
+# Optional: transformers are imported lazily; install for better accuracy
+transformers
+
 jupyter
