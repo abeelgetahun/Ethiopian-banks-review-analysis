@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from transformers import pipeline, AutoModelForSequenceClassification, AutoTokenizer
 from textblob import TextBlob
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -55,19 +54,27 @@ def get_textblob_sentiment(text):
         return 'neutral', polarity
 
 def get_transformer_sentiment(text, model_name="distilbert-base-uncased-finetuned-sst-2-english"):
-    """Get sentiment using transformer model."""
+    """Get sentiment using a transformer model, with safe lazy import and fallback."""
+    try:
+        # Lazy import to avoid heavy dependency at module import time
+        from transformers import pipeline  # type: ignore
+    except Exception as import_err:
+        # Transformers not available; fallback gracefully
+        print(f"Transformers not available ({import_err}); falling back to VADER.")
+        return get_vader_sentiment(text)
+
     try:
         # Initialize the pipeline
         sentiment_pipeline = pipeline("sentiment-analysis", model=model_name)
-        
+
         # Truncate text if too long (most transformer models have a limit)
         if len(text.split()) > 500:
             text = ' '.join(text.split()[:500])
-            
+
         result = sentiment_pipeline(text)[0]
         label = result['label'].lower()
         score = result['score']
-        
+
         # Map LABEL_0/LABEL_1 to negative/positive if needed
         if label == 'label_0':
             return 'negative', score

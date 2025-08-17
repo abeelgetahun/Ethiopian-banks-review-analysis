@@ -31,27 +31,27 @@ def load_analysis_results(data_dir):
     """
     try:
         task2_dir = Path(data_dir) / "task2"
-        
+
         # Load sentiment results
         sentiment_path = task2_dir / "sentiment_results.csv"
         logger.info(f"Loading sentiment results from {sentiment_path}")
         sentiment_df = pd.read_csv(sentiment_path)
-        
+
         # Load theme results
-        themes_path = task2_dir / "sentiments_results.csv"
+        themes_path = task2_dir / "bank_themes.csv"
         logger.info(f"Loading themes from {themes_path}")
         themes_df = pd.read_csv(themes_path)
-        
+
         # Load keywords
         keywords_path = task2_dir / "bank_keywords.csv"
         logger.info(f"Loading keywords from {keywords_path}")
         keywords_df = pd.read_csv(keywords_path)
-        
+
         # Load final results with themes assigned to reviews
         final_path = task2_dir / "final_results.csv"
         logger.info(f"Loading final results from {final_path}")
         final_df = pd.read_csv(final_path)
-        
+
         return {
             "sentiment": sentiment_df,
             "themes": themes_df,

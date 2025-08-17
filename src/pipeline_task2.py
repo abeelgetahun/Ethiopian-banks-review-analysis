@@ -117,9 +117,9 @@ def run_pipeline(input_path, output_dir):
     return final_df
 
 if __name__ == "__main__":
-    # Define paths
-    input_path = "data/processed/processed_reviews.csv"
+    # Define paths aligned with preprocessor outputs
+    input_path = "data/processed/bank_reviews_processed.csv"
     output_dir = "data/task2"
-    
+
     # Run pipeline
     run_pipeline(input_path, output_dir)
