@@ -8,28 +8,27 @@ import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import LatentDirichletAllocation, NMF
 from collections import Counter
-import spacy
+try:
+    import spacy
+except Exception:  # optional dependency
+    spacy = None
 import string
 from langdetect import detect, LangDetectException
 
-# Download necessary NLTK resources
-try:
-    nltk.data.find('tokenizers/punkt')
-    nltk.data.find('corpora/stopwords')
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    nltk.download('punkt')
-    nltk.download('stopwords')
-    nltk.download('wordnet')
+# Avoid downloads at import; try to ensure resources on first use instead
 
-# Load spaCy model
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    import sys
-    print("Downloading spaCy model...")
-    spacy.cli.download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+def _get_spacy_model():
+    if spacy is None:
+        return None
+    try:
+        return spacy.load("en_core_web_sm")
+    except Exception:
+        try:
+            # Attempt to download quietly
+            spacy.cli.download("en_core_web_sm")
+            return spacy.load("en_core_web_sm")
+        except Exception:
+            return None
 
 # Custom stopwords list with banking terms we want to keep
 ADDITIONAL_STOPWORDS = ['app', 'bank', 'use', 'using', 'used', 'good', 'great', 'best', 'bad',
@@ -57,11 +56,39 @@ def preprocess_text(text, remove_banking_terms=False):
     text = re.sub(r'[^\w\s]', ' ', text)
     text = re.sub(r'\d+', ' ', text)
     
-    # Tokenize
-    tokens = word_tokenize(text)
+    # Ensure NLTK resources
+    # Try NLTK tokenization; if unavailable, fall back to regex tokens
+    tokens = []
+    try:
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            try:
+                nltk.download('punkt', quiet=True)
+                # Newer NLTK versions also need punkt_tab
+                nltk.download('punkt_tab', quiet=True)
+            except Exception:
+                pass
+        tokens = word_tokenize(text)
+    except Exception:
+        # Very simple fallback tokenizer
+        tokens = re.findall(r"\b\w+\b", text)
     
     # Remove stopwords
-    stop_words = set(stopwords.words('english'))
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        try:
+            nltk.download('stopwords', quiet=True)
+        except Exception:
+            pass
+    try:
+        stop_words = set(stopwords.words('english'))
+    except Exception:
+        # Minimal fallback set
+        stop_words = {
+            'the','a','an','and','or','in','on','at','to','for','of','is','are','was','were','be','this','that','it','with','as','by','from'
+        }
     
     # Add custom stopwords but keep banking terms
     final_stopwords = stop_words.union(set(ADDITIONAL_STOPWORDS))
@@ -71,8 +98,19 @@ def preprocess_text(text, remove_banking_terms=False):
     tokens = [word for word in tokens if word not in final_stopwords and len(word) > 2]
     
     # Lemmatize
-    lemmatizer = WordNetLemmatizer()
-    tokens = [lemmatizer.lemmatize(word) for word in tokens]
+    try:
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        try:
+            nltk.download('wordnet', quiet=True)
+        except Exception:
+            pass
+    try:
+        lemmatizer = WordNetLemmatizer()
+        tokens = [lemmatizer.lemmatize(word) for word in tokens]
+    except Exception:
+        # If lemmatizer unavailable, keep tokens as-is
+        tokens = list(tokens)
     
     return " ".join(tokens)
 
@@ -126,11 +164,22 @@ def extract_keywords_spacy(df, n_keywords=20):
     df['language'] = df['review_text'].apply(
         lambda x: detect_language(str(x)) if pd.notnull(x) else 'unknown'
     )
-    
+
+    nlp = _get_spacy_model()
+    if nlp is None:
+        # Fallback: use TFIDF keywords if spaCy model unavailable
+        tfidf_keywords = extract_keywords_tfidf(df)
+        # Convert to expected shape
+        keywords_rows = []
+        for bank, pairs in tfidf_keywords.items():
+            for kw, score in pairs:
+                keywords_rows.append({"bank": bank, "keyword": kw, "score": score})
+        return keywords_rows
+
     # Only process English reviews with spaCy
     english_df = df[df['language'] == 'en'].copy()
     english_df['processed_text'] = english_df['review_text'].apply(
-        lambda x: ' '.join([token.lemma_ for token in nlp(str(x)) 
+        lambda x: ' '.join([token.lemma_ for token in nlp(str(x))
                            if not token.is_stop and not token.is_punct and len(token.text) > 2])
     )
     
