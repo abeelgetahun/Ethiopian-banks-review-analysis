@@ -6,11 +6,7 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import re
 from langdetect import detect, LangDetectException
 
-# Download VADER lexicon if not already present
-try:
-    nltk.data.find('vader_lexicon')
-except LookupError:
-    nltk.download('vader_lexicon')
+# Avoid downloading at import time; we'll attempt lazy load with fallback in get_vader_sentiment
 
 def detect_language(text):
     """Detect the language of the text."""
@@ -29,17 +25,55 @@ def clean_for_sentiment(text):
     text = re.sub(r'[^\w\s.,!?]', '', text)
     return text.strip()
 
+def _simple_lexicon_sentiment(text: str):
+    """Very lightweight lexicon-based fallback when VADER is unavailable."""
+    pos_words = {
+        'good','great','excellent','love','like','amazing','fast','easy','nice','smooth','best','perfect','quick'
+    }
+    neg_words = {
+        'bad','terrible','awful','hate','dislike','slow','bug','error','crash','worst','hard','difficult','lag'
+    }
+    words = re.findall(r"\w+", text.lower())
+    score = 0
+    for w in words:
+        if w in pos_words:
+            score += 1
+        if w in neg_words:
+            score -= 1
+    # Normalize score to [-1,1] roughly
+    norm = max(1, len(words))
+    compound = max(-1.0, min(1.0, score / (norm ** 0.5)))
+    label = 'neutral'
+    if compound >= 0.05:
+        label = 'positive'
+    elif compound <= -0.05:
+        label = 'negative'
+    return label, float(compound)
+
 def get_vader_sentiment(text):
-    """Get sentiment using VADER."""
-    sia = SentimentIntensityAnalyzer()
-    sentiment = sia.polarity_scores(text)
-    
-    if sentiment['compound'] >= 0.05:
-        return 'positive', sentiment['compound']
-    elif sentiment['compound'] <= -0.05:
-        return 'negative', sentiment['compound']
-    else:
-        return 'neutral', sentiment['compound']
+    """Get sentiment using VADER, with graceful fallback if resources missing."""
+    try:
+        # Ensure resource is available, else try to download; if download fails, fallback
+        try:
+            nltk.data.find('sentiment/vader_lexicon')
+        except LookupError:
+            try:
+                nltk.download('vader_lexicon', quiet=True)
+            except Exception:
+                return _simple_lexicon_sentiment(text)
+
+        sia = SentimentIntensityAnalyzer()
+        sentiment = sia.polarity_scores(text)
+        compound = sentiment.get('compound', 0.0)
+        if compound >= 0.05:
+            return 'positive', compound
+        elif compound <= -0.05:
+            return 'negative', compound
+        else:
+            return 'neutral', compound
+    except Exception:
+        # Any unexpected error -> simple fallback
+        return _simple_lexicon_sentiment(text)
 
 def get_textblob_sentiment(text):
     """Get sentiment using TextBlob."""
@@ -58,9 +92,8 @@ def get_transformer_sentiment(text, model_name="distilbert-base-uncased-finetune
     try:
         # Lazy import to avoid heavy dependency at module import time
         from transformers import pipeline  # type: ignore
-    except Exception as import_err:
+    except Exception:
         # Transformers not available; fallback gracefully
-        print(f"Transformers not available ({import_err}); falling back to VADER.")
         return get_vader_sentiment(text)
 
     try:
@@ -82,8 +115,7 @@ def get_transformer_sentiment(text, model_name="distilbert-base-uncased-finetune
             return 'positive', score
         else:
             return label, score
-    except Exception as e:
-        print(f"Error with transformer model: {e}")
+    except Exception:
         # Fall back to VADER if transformer fails
         return get_vader_sentiment(text)
 
